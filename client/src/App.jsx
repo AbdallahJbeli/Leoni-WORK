@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login               from './pages/Login';
 import ChangePassword      from './pages/ChangePassword';
 import DashboardDemandeur  from './pages/demandeur/DashboardDemandeur';
+import DetailDemande       from './pages/demandeur/DetailDemande';
 import NouvelleDemande     from './pages/demandeur/NouvelleDemande';
 import DashboardTechnicien from './pages/technicien/DashboardTechnicien';
 import FicheTechnicien     from './pages/technicien/FicheTechnicien';
@@ -36,6 +37,11 @@ export default function App() {
           <Route path="/demandeur/nouvelle" element={
             <ProtectedRoute roles={['demandeur']}>
               <NouvelleDemande />
+            </ProtectedRoute>
+          } />
+          <Route path="/demandeur/demande/:id" element={
+            <ProtectedRoute roles={['demandeur']}>
+              <DetailDemande />
             </ProtectedRoute>
           } />
 

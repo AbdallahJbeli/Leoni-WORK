@@ -86,6 +86,7 @@ export default function DashboardDemandeur() {
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Remarque</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Statut</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -106,6 +107,14 @@ export default function DashboardDemandeur() {
                     <td className="px-4 py-3"><StatutBadge statut={d.statut} /></td>
                     <td className="px-4 py-3 text-gray-400 text-xs">
                       {new Date(d.date_demande).toLocaleDateString('fr-FR')}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        to={`/demandeur/demande/${d.id}`}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition"
+                      >
+                        Voir
+                      </Link>
                     </td>
                   </tr>
                 ))}

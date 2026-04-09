@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Plus, Trash2, Send } from 'lucide-react';
+import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import StatutBadge from '../../components/StatutBadge';
 import api from '../../api/axios';
@@ -37,27 +37,71 @@ export default function FicheTechnicien() {
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [showFiche, setShowFiche] = useState(false);
-  const [showQualite, setShowQualite] = useState(false);
-  const [msgQualite, setMsgQualite] = useState('');
+  const [impactProduit, setImpactProduit] = useState(false);
+  const [descriptionImpact, setDescriptionImpact] = useState('');
+  const [waitingQualite, setWaitingQualite] = useState(false);
+  const [confirmButtonVisible, setConfirmButtonVisible] = useState(true);
 
   const [fiche, setFiche] = useState({
     recu_le: '', fin_le: '',
     description_travaux: '',
     type_travail: 'MCP',
     code_defaut1: '', code_defaut2: '', code_defaut3: '',
-    heures_prestees: '',
-    temps_arret: '', temps_attente: '', temps_attente_piece: '',
+    heures_prestees_h: '', heures_prestees_m: '',
+    temps_arret_h: '', temps_arret_m: '',
+    temps_attente_h: '', temps_attente_m: '',
+    temps_attente_piece_h: '', temps_attente_piece_m: '',
   });
   const [pieces, setPieces] = useState([]);
   const [intervenants, setIntervenants] = useState([]);
+
+  const parseTimeParts = (value) => {
+    if (value == null || value === '') return { h: '', m: '' };
+    const raw = String(value).trim();
+    const match = /(?:(\d+)\s*h(?:eures?)?)?\s*(?:(\d+)\s*m(?:in(?:utes?)?)?)?/i.exec(raw);
+    if (match && (match[1] || match[2])) {
+      return { h: match[1] || '', m: match[2] || '' };
+    }
+    const num = parseFloat(raw.replace(',', '.'));
+    if (!Number.isNaN(num)) {
+      const hours = Math.floor(num);
+      const minutes = Math.round((num - hours) * 60);
+      return { h: hours ? String(hours) : '', m: minutes ? String(minutes) : '' };
+    }
+    return { h: '', m: '' };
+  };
+
+  const formatTimeValue = (hours, minutes) => {
+    const h = String(hours || '').trim();
+    const m = String(minutes || '').trim();
+    if (!h && !m) return '';
+    if (h && m) return `${h}h ${m}m`;
+    if (h) return `${h}h`;
+    return `${m}m`;
+  };
+
+  const buildFichePayload = (currentFiche) => ({
+    ...currentFiche,
+    heures_prestees: formatTimeValue(currentFiche.heures_prestees_h, currentFiche.heures_prestees_m),
+    temps_arret: formatTimeValue(currentFiche.temps_arret_h, currentFiche.temps_arret_m),
+    temps_attente: formatTimeValue(currentFiche.temps_attente_h, currentFiche.temps_attente_m),
+    temps_attente_piece: formatTimeValue(currentFiche.temps_attente_piece_h, currentFiche.temps_attente_piece_m),
+  });
 
   const fetchData = async () => {
     try {
       const res = await api.get(`/demandes/${id}`);
       setData(res.data);
+      if (res.data.demande.statut !== 'attente_qualite') {
+        setWaitingQualite(false);
+      }
       // Pré-rempli si fiche existante
       if (res.data.fiche) {
         const f = res.data.fiche;
+        const heures = parseTimeParts(f.heures_prestees);
+        const arret = parseTimeParts(f.temps_arret);
+        const attente = parseTimeParts(f.temps_attente);
+        const attentePiece = parseTimeParts(f.temps_attente_piece);
         setFiche({
           recu_le:             f.recu_le ? f.recu_le.slice(0,16) : '',
           fin_le:              f.fin_le  ? f.fin_le.slice(0,16)  : '',
@@ -66,10 +110,14 @@ export default function FicheTechnicien() {
           code_defaut1:        f.code_defaut1 || '',
           code_defaut2:        f.code_defaut2 || '',
           code_defaut3:        f.code_defaut3 || '',
-          heures_prestees:     f.heures_prestees || '',
-          temps_arret:         f.temps_arret || '',
-          temps_attente:       f.temps_attente || '',
-          temps_attente_piece: f.temps_attente_piece || '',
+          heures_prestees_h:   heures.h,
+          heures_prestees_m:   heures.m,
+          temps_arret_h:       arret.h,
+          temps_arret_m:       arret.m,
+          temps_attente_h:     attente.h,
+          temps_attente_m:     attente.m,
+          temps_attente_piece_h: attentePiece.h,
+          temps_attente_piece_m: attentePiece.m,
         });
         setPieces(res.data.pieces || []);
         setIntervenants(f.intervenants || []);
@@ -111,14 +159,19 @@ export default function FicheTechnicien() {
       toast.error('Date de réception et description requis');
       return;
     }
+
     setSaving(true);
     try {
       await api.post(`/technicien/${id}/accepter`, {
-        ...fiche,
+        ...buildFichePayload(fiche),
         pieces,
         intervenants,
       });
       toast.success('Fiche enregistrée');
+      if (qualityDecision === 'approuve') {
+        setConfirmButtonVisible(false);
+      }
+      setShowFiche(false);
       fetchData();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Erreur');
@@ -127,14 +180,40 @@ export default function FicheTechnicien() {
     }
   };
 
-  const handleQualite = async () => {
+  const handleConfirmAndSendQualite = async () => {
+    if (qualityDecision === 'approuve') {
+      return handleSaveFiche();
+    }
+
+    if (!fiche.recu_le || !fiche.description_travaux) {
+      toast.error('Date de réception et description requis');
+      return;
+    }
+
+    const messageTech = `Impact produit: ${impactProduit ? 'Oui' : 'Non'}${impactProduit && descriptionImpact ? ` \nDescription: ${descriptionImpact}` : ''}`;
+
+    setSaving(true);
     try {
-      await api.post(`/technicien/${id}/approbation-qualite`, { message_tech: msgQualite });
-      toast.success('Demande d\'approbation qualité envoyée');
-      setShowQualite(false);
+      await api.post(`/technicien/${id}/accepter`, {
+        ...buildFichePayload(fiche),
+        pieces,
+        intervenants,
+      });
+
+      await api.post(`/technicien/${id}/approbation-qualite`, {
+        message_tech: messageTech,
+        impact_produit: impactProduit,
+        description_impact: descriptionImpact,
+      });
+
+      toast.success('Fiche confirmée et envoyée à la qualité');
+      setWaitingQualite(true);
+      setShowFiche(false);
       fetchData();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Erreur');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -150,7 +229,11 @@ export default function FicheTechnicien() {
   if (!data)   return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400">Demande introuvable</div>;
 
   const { demande, approbation } = data;
-  const canAct = !['repare','hors_service','qualite_approuvee','qualite_refusee'].includes(demande.statut);
+  const qualityDecision = approbation?.decision;
+  const isQualityApproved = qualityDecision === 'approuve';
+  const isQualityRefused = qualityDecision === 'refuse';
+  const isWaitingApproval = demande.statut === 'attente_qualite' || waitingQualite;
+  const canAct = !['repare','hors_service','qualite_refusee'].includes(demande.statut) && !isWaitingApproval;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -204,45 +287,16 @@ export default function FicheTechnicien() {
               🔴 Hors service
             </button>
             {demande.statut === 'en_reparation' && (
-              <>
-                <button
-                  onClick={handleRepare}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition"
-                >
-                  🔧 Marquer Réparé
-                </button>
-                <button
-                  onClick={() => setShowQualite(true)}
-                  className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 text-sm font-medium px-5 py-2.5 rounded-xl transition"
-                >
-                  🟡 Envoyer approbation qualité
-                </button>
-              </>
+              <button
+                onClick={handleRepare}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition"
+              >
+                🔧 Marquer Réparé
+              </button>
             )}
           </div>
         )}
 
-        {/* Modal approbation qualité */}
-        {showQualite && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6 mb-6">
-            <h3 className="font-semibold text-yellow-800 mb-3">Demande d'approbation qualité</h3>
-            <textarea
-              value={msgQualite}
-              onChange={e => setMsgQualite(e.target.value)}
-              rows={3}
-              placeholder="Décrivez l'impact sur le produit..."
-              className="w-full border border-yellow-300 rounded-lg px-3 py-2 text-sm focus:outline-none resize-none bg-white"
-            />
-            <div className="flex gap-2 mt-3">
-              <button onClick={handleQualite} className="flex items-center gap-1.5 bg-yellow-600 hover:bg-yellow-700 text-white text-sm px-4 py-2 rounded-lg transition">
-                <Send size={14} /> Envoyer
-              </button>
-              <button onClick={() => setShowQualite(false)} className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2 transition">
-                Annuler
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Résultat approbation qualité */}
         {approbation && (
@@ -264,7 +318,21 @@ export default function FicheTechnicien() {
 
         {/* Fiche technicien */}
         {showFiche && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+          <div className="relative bg-white rounded-2xl border border-gray-200 p-6">
+            {(isWaitingApproval || isQualityRefused) && (
+              <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-2xl z-10 flex items-center justify-center p-6">
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-gray-900 mb-2">
+                    {isWaitingApproval ? "Attendre l'approbation qualité" : 'Fiche annulée par la qualité'}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {isWaitingApproval
+                      ? 'La fiche est en attente de validation par le service qualité.'
+                      : 'La demande a été refusée par le service qualité et ne peut plus être modifiée.'}
+                  </p>
+                </div>
+              </div>
+            )}
             <h3 className="font-bold text-gray-900 text-lg mb-5">Fiche technicien</h3>
 
             <div className="space-y-5">
@@ -350,26 +418,45 @@ export default function FicheTechnicien() {
               </div>
 
               {/* Heures + Temps */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Heures prestées</label>
-                  <input type="number" step="0.5" value={fiche.heures_prestees} onChange={e=>setFiche(p=>({...p,heures_prestees:e.target.value}))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Temps d'arrêt (min)</label>
-                  <input type="number" value={fiche.temps_arret} onChange={e=>setFiche(p=>({...p,temps_arret:e.target.value}))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Temps d'attente (min)</label>
-                  <input type="number" value={fiche.temps_attente} onChange={e=>setFiche(p=>({...p,temps_attente:e.target.value}))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Attente pièces (min)</label>
-                  <input type="number" value={fiche.temps_attente_piece} onChange={e=>setFiche(p=>({...p,temps_attente_piece:e.target.value}))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-gray-700 text-center">Observations</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Heures prestées</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="number" min="0" placeholder="h" value={fiche.heures_prestees_h} onChange={e=>setFiche(p=>({...p,heures_prestees_h:e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input type="number" min="0" max="59" placeholder="min" value={fiche.heures_prestees_m} onChange={e=>setFiche(p=>({...p,heures_prestees_m:e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Temps d'arrêt</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="number" min="0" placeholder="h" value={fiche.temps_arret_h} onChange={e=>setFiche(p=>({...p,temps_arret_h:e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input type="number" min="0" max="59" placeholder="min" value={fiche.temps_arret_m} onChange={e=>setFiche(p=>({...p,temps_arret_m:e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Temps d'attente</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="number" min="0" placeholder="h" value={fiche.temps_attente_h} onChange={e=>setFiche(p=>({...p,temps_attente_h:e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input type="number" min="0" max="59" placeholder="min" value={fiche.temps_attente_m} onChange={e=>setFiche(p=>({...p,temps_attente_m:e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Attente pièces</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="number" min="0" placeholder="h" value={fiche.temps_attente_piece_h} onChange={e=>setFiche(p=>({...p,temps_attente_piece_h:e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input type="number" min="0" max="59" placeholder="min" value={fiche.temps_attente_piece_m} onChange={e=>setFiche(p=>({...p,temps_attente_piece_m:e.target.value}))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -417,14 +504,56 @@ export default function FicheTechnicien() {
                     </button>
                   </div>
                 ))}
+              </div> 
+
+              {/* Impact produit / Résultat qualité */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-700">Impact produit</p>
+                {qualityDecision ? (
+                  <div className={`rounded-2xl p-4 ${isQualityApproved ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                    <p className="font-semibold">Résultat qualité : {isQualityApproved ? 'Approuvée' : 'Refusée'}</p>
+                    <p className="text-sm mt-1">
+                      {isQualityApproved
+                        ? 'La fiche a été approuvée par la qualité. Vous pouvez continuer la saisie.'
+                        : 'La fiche a été annulée par la qualité. Aucun traitement supplémentaire n’est possible.'}
+                    </p>
+                    {approbation.commentaire_qualite && (
+                      <p className="text-sm text-gray-700 mt-2">Commentaire qualité : {approbation.commentaire_qualite}</p>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <label className={`flex items-center gap-2 px-4 py-2 rounded-xl border cursor-pointer ${impactProduit ? 'bg-blue-50 border-blue-400 text-blue-700' : 'border-gray-200 hover:border-gray-400'}`}>
+                        <input type="radio" name="impactProduit" checked={impactProduit} onChange={() => setImpactProduit(true)} className="hidden" />
+                        <span>Oui</span>
+                      </label>
+                      <label className={`flex items-center gap-2 px-4 py-2 rounded-xl border cursor-pointer ${!impactProduit ? 'bg-blue-50 border-blue-400 text-blue-700' : 'border-gray-200 hover:border-gray-400'}`}>
+                        <input type="radio" name="impactProduit" checked={!impactProduit} onChange={() => setImpactProduit(false)} className="hidden" />
+                        <span>Non</span>
+                      </label>
+                    </div>
+                    {impactProduit && (
+                      <textarea
+                        value={descriptionImpact}
+                        onChange={e => setDescriptionImpact(e.target.value)}
+                        rows={3}
+                        placeholder="Décrivez l'impact sur le produit"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      />
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Save */}
-              <button onClick={handleSaveFiche} disabled={saving}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-60">
-                {saving && <Loader2 size={16} className="animate-spin" />}
-                {saving ? 'Enregistrement...' : 'Confirmer la fiche'}
-              </button>
+              {canAct && confirmButtonVisible && (
+                <button onClick={handleConfirmAndSendQualite} disabled={saving || isWaitingApproval || isQualityRefused}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-60">
+                  {saving && <Loader2 size={16} className="animate-spin" />}
+                  {saving ? 'Enregistrement...' : isQualityRefused ? 'Fiche annulée' : qualityDecision === 'approuve' ? 'Mettre à jour la fiche' : 'Confirmer et envoyer approbation qualité'}
+                </button>
+              )}
             </div>
           </div>
         )}

@@ -72,7 +72,7 @@ router.put('/approbations/:appro_id/decider', verifyToken, authorizeRoles('quali
       [decision, commentaire_qualite || null, req.user.id, req.user.matricule, appro_id]
     );
 
-    const nouveauStatut = decision === 'approuve' ? 'qualite_approuvee' : 'qualite_refusee';
+    const nouveauStatut = decision === 'approuve' ? 'en_reparation' : 'qualite_refusee';
     await pool.query(
       'UPDATE demandes SET statut = ? WHERE id = ?',
       [nouveauStatut, appro.demande_id]
