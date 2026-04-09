@@ -493,8 +493,8 @@ export default function FicheTechnicien() {
                   <div key={i} className="flex gap-2 mb-2">
                     <input placeholder="TZ Nummer" value={p.tz_nummer} onChange={e=>updatePiece(i,'tz_nummer',e.target.value)}
                       className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    <input placeholder="Désignation" value={p.designation} onChange={e=>updatePiece(i,'designation',e.target.value)}
-                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    {/* <input placeholder="Désignation" value={p.designation} onChange={e=>updatePiece(i,'designation',e.target.value)}
+                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /> */}
                     <input type="number" placeholder="Qté" value={p.quantite} onChange={e=>updatePiece(i,'quantite',e.target.value)}
                       className="w-20 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <button onClick={()=>removePiece(i)} className="text-blue-400 hover:text-blue-600 transition p-2">

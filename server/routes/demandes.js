@@ -123,10 +123,12 @@ router.get('/', verifyToken, async (req, res) => {
         `SELECT d.*,
           u.nom AS dem_nom, u.prenom AS dem_prenom,
           ft.type_travail, ft.heures_prestees,
-          ft.temps_arret, ft.temps_attente, ft.temps_attente_piece
+          ft.temps_arret, ft.temps_attente, ft.temps_attente_piece,
+          t.nom AS nom_tech, t.prenom AS prenom_tech
          FROM demandes d
          JOIN users u ON u.id = d.demandeur_id
          LEFT JOIN fiches_technicien ft ON ft.demande_id = d.id
+         LEFT JOIN users t ON t.id = ft.technicien_id
          ORDER BY d.date_demande DESC`
       );
     }
