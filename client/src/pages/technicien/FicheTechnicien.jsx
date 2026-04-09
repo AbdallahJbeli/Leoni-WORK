@@ -154,9 +154,26 @@ export default function FicheTechnicien() {
     }
   };
 
+  const validateFiche = () => {
+    if (!fiche.recu_le) return 'La date de réception est requise.';
+    if (!fiche.fin_le) return 'La date de fin est requise.';
+    if (!fiche.description_travaux) return 'La description des travaux est requise.';
+    if (!fiche.type_travail) return 'Le type de travail est requis.';
+    if (!fiche.code_defaut1) return 'Le code défaut 1 est requis.';
+    if (!fiche.code_defaut2) return 'Le code défaut 2 est requis.';
+    if (!fiche.code_defaut3) return 'Le code défaut 3 est requis.';
+    if (!fiche.heures_prestees_h && !fiche.heures_prestees_m) return 'Les heures prestées sont requises.';
+    if (!fiche.temps_arret_h && !fiche.temps_arret_m) return 'Le temps d’arrêt est requis.';
+    if (!fiche.temps_attente_h && !fiche.temps_attente_m) return 'Le temps d’attente est requis.';
+    if (!fiche.temps_attente_piece_h && !fiche.temps_attente_piece_m) return 'Le temps d’attente pièces est requis.';
+    if (impactProduit && !descriptionImpact.trim()) return 'La description de l’impact produit est requise.';
+    return null;
+  };
+
   const handleSaveFiche = async () => {
-    if (!fiche.recu_le || !fiche.description_travaux) {
-      toast.error('Date de réception et description requis');
+    const validationError = validateFiche();
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
 
@@ -185,12 +202,11 @@ export default function FicheTechnicien() {
       return handleSaveFiche();
     }
 
-    if (!fiche.recu_le || !fiche.description_travaux) {
-      toast.error('Date de réception et description requis');
+    const validationError = validateFiche();
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
-
-    const messageTech = `Impact produit: ${impactProduit ? 'Oui' : 'Non'}${impactProduit && descriptionImpact ? ` \nDescription: ${descriptionImpact}` : ''}`;
 
     setSaving(true);
     try {
@@ -200,14 +216,19 @@ export default function FicheTechnicien() {
         intervenants,
       });
 
-      await api.post(`/technicien/${id}/approbation-qualite`, {
-        message_tech: messageTech,
-        impact_produit: impactProduit,
-        description_impact: descriptionImpact,
-      });
+      if (impactProduit) {
+        const messageTech = `Impact produit: Oui${descriptionImpact ? ` \nDescription: ${descriptionImpact}` : ''}`;
+        await api.post(`/technicien/${id}/approbation-qualite`, {
+          message_tech: messageTech,
+          impact_produit: impactProduit,
+          description_impact: descriptionImpact,
+        });
+        toast.success('Fiche confirmée et envoyée à la qualité');
+        setWaitingQualite(true);
+      } else {
+        toast.success('Fiche enregistrée sans approbation qualité');
+      }
 
-      toast.success('Fiche confirmée et envoyée à la qualité');
-      setWaitingQualite(true);
       setShowFiche(false);
       fetchData();
     } catch (err) {
@@ -360,7 +381,7 @@ export default function FicheTechnicien() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Fin le</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fin le *</label>
                   <input type="datetime-local" value={fiche.fin_le} onChange={e => setFiche(p=>({...p,fin_le:e.target.value}))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
@@ -392,7 +413,7 @@ export default function FicheTechnicien() {
               {/* Codes défauts */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Code défaut 1 (What)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Code défaut 1 (What) *</label>
                   <select value={fiche.code_defaut1} onChange={e=>setFiche(p=>({...p,code_defaut1:e.target.value}))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">-- Sélectionner --</option>
@@ -400,7 +421,7 @@ export default function FicheTechnicien() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Code défaut 2 (Why)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Code défaut 2 (Why) *</label>
                   <select value={fiche.code_defaut2} onChange={e=>setFiche(p=>({...p,code_defaut2:e.target.value}))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">-- Sélectionner --</option>
@@ -408,7 +429,7 @@ export default function FicheTechnicien() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Code défaut 3 (Where)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Code défaut 3 (Where) *</label>
                   <select value={fiche.code_defaut3} onChange={e=>setFiche(p=>({...p,code_defaut3:e.target.value}))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">-- Sélectionner --</option>
@@ -542,6 +563,9 @@ export default function FicheTechnicien() {
                         className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                       />
                     )}
+                    <p className="text-xs text-gray-500">
+                      Si « Non », la fiche sera enregistrée directement sans être envoyée au service qualité.
+                    </p>
                   </>
                 )}
               </div>
@@ -551,7 +575,7 @@ export default function FicheTechnicien() {
                 <button onClick={handleConfirmAndSendQualite} disabled={saving || isWaitingApproval || isQualityRefused}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-60">
                   {saving && <Loader2 size={16} className="animate-spin" />}
-                  {saving ? 'Enregistrement...' : isQualityRefused ? 'Fiche annulée' : qualityDecision === 'approuve' ? 'Mettre à jour la fiche' : 'Confirmer et envoyer approbation qualité'}
+                  {saving ? 'Enregistrement...' : isQualityRefused ? 'Fiche annulée' : qualityDecision === 'approuve' ? 'Mettre à jour la fiche' : impactProduit ? 'Confirmer et envoyer approbation qualité' : 'Enregistrer la fiche'}
                 </button>
               )}
             </div>

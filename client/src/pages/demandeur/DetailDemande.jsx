@@ -11,6 +11,7 @@ export default function DetailDemande() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -20,6 +21,20 @@ export default function DetailDemande() {
       toast.error('Erreur lors du chargement de la demande');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApproveRepair = async () => {
+    if (!window.confirm('Confirmer que la réparation est bien terminée et acceptée ?')) return;
+    setSaving(true);
+    try {
+      await api.put(`/demandes/${id}/accepter-demandeur`);
+      toast.success('Réparation acceptée');
+      fetchData();
+    } catch {
+      toast.error('Impossible d’approuver la réparation');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -125,6 +140,23 @@ export default function DetailDemande() {
                   <p className="text-sm font-medium text-gray-800">
                     {approbation.decision === 'approuve' ? 'Approuvée' : approbation.decision === 'refuse' ? 'Refusée' : 'En attente'}
                   </p>
+                </div>
+              )}
+              {demande.statut === 'repare' && (
+                <div className="rounded-2xl bg-blue-50 border border-blue-200 p-4">
+                  <p className="text-xs text-gray-500 mb-2">Validation du demandeur</p>
+                  <button
+                    disabled={saving}
+                    onClick={handleApproveRepair}
+                    className="w-full inline-flex justify-center items-center gap-2 rounded-xl bg-blue-600 text-white px-4 py-3 text-sm font-medium hover:bg-blue-700 transition disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? 'Enregistrement...' : 'Approuver la réparation'}
+                  </button>
+                </div>
+              )}
+              {demande.statut === 'acceptee' && (
+                <div className="rounded-2xl bg-cyan-50 border border-cyan-200 p-4">
+                  <p className="text-sm font-medium text-cyan-800">✅ Réparation acceptée par le demandeur</p>
                 </div>
               )}
             </div>

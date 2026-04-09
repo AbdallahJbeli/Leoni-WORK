@@ -202,6 +202,52 @@ router.get('/:id', verifyToken, async (req, res) => {
 });
 
 // ----------------------------------------------------------
+// PUT /api/demandes/:id/accepter-demandeur
+// Demandeur confirme que la réparation est terminée
+// ----------------------------------------------------------
+router.put('/:id/accepter-demandeur', verifyToken, authorizeRoles('demandeur'), async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT * FROM demandes WHERE id = ? AND demandeur_id = ?',
+      [req.params.id, req.user.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Demande introuvable' });
+    }
+
+    const demande = rows[0];
+    if (demande.statut !== 'repare') {
+      return res.status(400).json({ message: 'La demande doit être marquée comme réparée pour être approuvée' });
+    }
+
+    await pool.query(
+      "UPDATE demandes SET statut = 'acceptee' WHERE id = ?",
+      [req.params.id]
+    );
+
+    const [fiche] = await pool.query(
+      'SELECT technicien_id FROM fiches_technicien WHERE demande_id = ?',
+      [req.params.id]
+    );
+    if (fiche.length > 0 && fiche[0].technicien_id) {
+      await pool.query(
+        'INSERT INTO notifications (destinataire_id, demande_id, message) VALUES (?,?,?)',
+        [
+          fiche[0].technicien_id,
+          req.params.id,
+          `✅ La demande ${demande.numero_bon} a été acceptée par le demandeur`
+        ]
+      );
+    }
+
+    res.json({ message: 'Réparation acceptée par le demandeur' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// ----------------------------------------------------------
 // GET /api/demandes/notifications/mes
 // ----------------------------------------------------------
 router.get('/notifications/mes', verifyToken, async (req, res) => {
